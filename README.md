@@ -1,1 +1,3 @@
 # pyAGILE
+
+export PYTHONPATH=$HOME/Projects/pyAGILE:$PYTHONPATH
