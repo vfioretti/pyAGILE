@@ -9,6 +9,7 @@
  - numpy
  - astropy
  - matplotlib
+ - healpy
  ---------------------------------------------------------------------------------
  Example:
  import AGILE as agile
@@ -25,7 +26,6 @@ import string
 import os
 import astropy.io.fits as pyfits
 from astropy import units as u
-from astropy.coordinates import SkyCoord as sky
 from numpy import * 
 import sys
 
@@ -37,6 +37,12 @@ import matplotlib.colors as cmc
 import numpy as np
 from math import pi
 
+
+import healpy as hp
+from astropy.coordinates import SkyCoord  # High-level coordinates
+from astropy.coordinates import ICRS, Galactic, FK4, FK5  # Low-level frames
+from astropy.coordinates import Angle, Latitude, Longitude  # Angles
+import astropy.units as u
 
 def plgal(title='', source_list='', square_list = '', ring_list='', vip_sources=0):
 	"""
@@ -160,33 +166,92 @@ def plgal(title='', source_list='', square_list = '', ring_list='', vip_sources=
 	plt.show()
 
 
-def grb_pipe(evt_file='', log_file='', par_file='', GRB_ra=0., GRB_dec=0., t1s=0., t2s=0., t1b=0., t2b=0.):
+def grb_pipe(evt_file='', log_file='', par_file='', GRB_time = 0., GRB_ra=0., GRB_dec=0., t1s=0., t2s=0., t1b=0., t2b=0., help=False):
     """
      grb_pipe() -  description
      ---------------------------------------------------------------------------------
      Search for significant signal in gamma-ray follow-ups
      ---------------------------------------------------------------------------------
      copyright            : (C) 2016 S. Cutini (ASDC) and A. Giuliani (IASF Milano)
-     ----------------------------------------------
+     ---------------------------------------------------------------------------------
+     Parameters
      - evt_file = event file'
      - log_file = log file'
      - par_file = parameter file for follow-up search'
      - GRB_ra = RA of the source in deg.'
      - GRB_dec = DEC of the source in deg.'
      - (optional)
+     	- GRB_time = T0 of the GRB
         - t1s = start time of N_on (GRB time reference frame)
         - t2s = stop time of N_on (GRB time reference frame)
         - t1b = start time of N_off (GRB time reference frame)
         - t2b = stop time of N_off (GRB time reference frame)
+        - help = True/False (printing the usage info)
+     ---------------------------------------------------------------------------------
+     Param file description (all rows are mandatory):
+     1) 369309044.736 = T0 of GRB (overwritten if the input parameter is found) 
+	 2) 10 = radius of the analysis region (deg.)
+	 3) 80 = FOV
+	 4) 70 = albedo
+	 5) 0 = t1s (seconds, respect with the T0, overwritten if the input parameter is found)
+	 6) 12 = t2s (seconds, respect with the T0, overwritten if the input parameter is found)
+	 7) -1000.0 = t1b (seconds, respect with the T0, overwritten if the input parameter is found)
+	 8) 1000.0 = t2b (seconds, respect with the T0, overwritten if the input parameter is found)
+     ---------------------------------------------------------------------------------
+     Output:
+     (alpha, S, t1s, t2s, t1b, t2b)
      ---------------------------------------------------------------------------------
      Caveats:
-     None
+     See Issue##1737
      ---------------------------------------------------------------------------------
      Modification history:
      - 2016/02/18: V. Fioretti (INAF/IASF Bologna) - including code in AGILE library
 
     """
-
+    if (help==True):
+     print 'grb_pipe() -  description															'
+     print '---------------------------------------------------------------------------------	'
+     print 'Search for significant signal in gamma-ray follow-ups								'
+     print '---------------------------------------------------------------------------------	'
+     print 'copyright            : (C) 2016 S. Cutini (ASDC) and A. Giuliani (IASF Milano)		'
+     print '---------------------------------------------------------------------------------	'
+     print 'Parameters																			'
+     print '- evt_file = event file																'	
+     print '- log_file = log file																'
+     print '- par_file = parameter file for follow-up search									'
+     print '- GRB_ra = RA of the source in deg.													'
+     print '- GRB_dec = DEC of the source in deg.												'
+     print '- (optional)																		'
+     print '	- GRB_time = T0 of the GRB														'
+     print '   - t1s = start time of N_on (GRB time reference frame)							'
+     print '   - t2s = stop time of N_on (GRB time reference frame)								'
+     print '   - t1b = start time of N_off (GRB time reference frame)							'
+     print '   - t2b = stop time of N_off (GRB time reference frame)							'
+     print '   - help = True/False (printing the usage info)									'
+     print '---------------------------------------------------------------------------------	'
+     print 'Param file description (all rows are mandatory):									'
+     print '1) 369309044.736 = T0 of GRB (overwritten if the input parameter is found) 			'
+     print '2) 10 = radius of the analysis region (deg.)										'
+     print '3) 80 = FOV																			'
+     print '4) 70 = albedo																		'
+     print '5) 0 = t1s (seconds, respect with the T0, overwritten if the input parameter is found)'
+     print '6) 12 = t2s (seconds, respect with the T0, overwritten if the input parameter is found)'
+     print '7) -1000.0 = t1b (seconds, respect with the T0, overwritten if the input parameter is found)'
+     print '8) 1000.0 = t2b (seconds, respect with the T0, overwritten if the input parameter is found)'
+     print '---------------------------------------------------------------------------------	'
+     print 'Output:																				'
+     print '(alpha, S, t1s, t2s, t1b, t2b)														'
+     print '---------------------------------------------------------------------------------	'
+     print 'Caveats:																			'
+     print 'See Issue#1737																		'
+     print '---------------------------------------------------------------------------------	'
+     print 'Modification history:																'
+     print '- 2016/02/18: V. Fioretti (INAF/IASF Bologna) - including code in AGILE library		'
+     
+     if (par_file=='' or evt_file=='' or log_file==''):
+		print 'FATAL ERROR: Wrong input parameters!!!!'
+		return
+	
     parfile=open(par_file,"r")
 
     # transformations
@@ -197,7 +262,11 @@ def grb_pipe(evt_file='', log_file='', par_file='', GRB_ra=0., GRB_dec=0., t1s=0
  
     # reading par file
     
-    GRB_time = float(parfile.readline())  # TT time (s)
+    if (GRB_time == 0):
+    	GRB_time = float(parfile.readline())  # TT time (s)
+    else:
+    	parfile.readline()
+    	
     raggio=float(parfile.readline()) # radius of the ring in degrees
     fov=float(parfile.readline())     # FOVRADMAX
     ea_th=float(parfile.readline())    # ALBEDORAD
@@ -205,14 +274,21 @@ def grb_pipe(evt_file='', log_file='', par_file='', GRB_ra=0., GRB_dec=0., t1s=0
     if (t2s - t1s) == 0.:
     	t1s=float(parfile.readline())     # T1 for the source
     	t2s=float(parfile.readline())     # T2 for the source
+    else:
+    	parfile.readline()
+    	parfile.readline()
 
     if (t2b - t1b) == 0.:    
     	t1b=float(parfile.readline())     # T1 for the background
     	t2b=float(parfile.readline())     # T2 for the background
+    else:
+    	parfile.readline()
+    	parfile.readline()
 
 
     print ''
     print 'GRB T0 :',GRB_time
+    print 'GRB T1 :',GRB_time + t2s
     print 'GRB (Ra, Dec) :',GRB_ra, GRB_dec
     print 'Ricerca eventi (Raggio):',raggio
     print 'Ricerca eventi (Tmin, Tmax):',t1s, t2s
@@ -278,6 +354,8 @@ def grb_pipe(evt_file='', log_file='', par_file='', GRB_ra=0., GRB_dec=0., t1s=0
 
     t1b=max(min(TIME_log-GRB_time),t1b)   # changing the range of the background time if outside the evt file time
     t2b=min(max(TIME_log-GRB_time),t2b)   # changing the range of the background time if outside the evt file time
+    
+    print TIME_log-GRB_time
     print 'Background T1 [sec]: ', t1b
     print 'Background T2 [sec]: ', t2b
 
@@ -410,7 +488,6 @@ def grb_pipe(evt_file='', log_file='', par_file='', GRB_ra=0., GRB_dec=0., t1s=0
         print "   !!!! Scegli un altro intervallo di background !!!!"
         tback=0
     
-    print tback
     
     #alp = ((t2s-t1s)*mean_src)/((t2b-t1b-(t2s-t1s))*mean_bkg)
     alp = ((t2s-t1s)*mean_src)/(tback*mean_bkg)
@@ -421,18 +498,67 @@ def grb_pipe(evt_file='', log_file='', par_file='', GRB_ra=0., GRB_dec=0., t1s=0
     source1=float(source)
     bkg1=float(bkg)
 
-    if source>0 :
+    if ((source>0) and (bkg>0)):
        L1 = math.pow(((source1+bkg1)/source1)*alp1,source1)
        L2 = math.pow(((bkg1+source1)/bkg1)/alp2,bkg1)
        L=L1*L2
        #print "L", alp2
+       print 'Alpha: ', alp
+
        S=math.sqrt(-2.*math.log(L))
        print "Li&Ma sigma", S
 
 
+
     hdulist.close()
+    if ((source>0) and (bkg>0)):
+    	return alp, S, t1s, t2s, t1b, t2b
+    else:
+    	return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
+
+def ring_list(nside=0):
+    """
+     ring_list() -  description
+     ---------------------------------------------------------------------------------
+     generating a list of HEALPIX rings in galactic coordinates using the ring 
+     resolution as input. The AGILE galactic reference system is used.
+     - nside = 2^res
+     - npix = 12 nside^2
+     ---------------------------------------------------------------------------------
+     copyright            : (C) 2016 V. Fioretti (INAF/IASF Bologna) 
+     ----------------------------------------------
+     Parameters:
+     - nside = ring resolution
+     ---------------------------------------------------------------------------------
+     Output:
+     - the l and b list of ring centers in galactic coordinates
+     ---------------------------------------------------------------------------------
+     Caveats:
+     None
+     ---------------------------------------------------------------------------------
+
+    """
+    npix_healpix = hp.nside2npix(nside)
+    res_healpix = (hp.nside2resol(nside, arcmin=True))/60. # deg.
     
+    theta_ring_healpix = np.zeros(npix_healpix)
+    phi_ring_healpix = np.zeros(npix_healpix)
+    l_ring_healpix = np.zeros(npix_healpix)
+    b_ring_healpix = np.zeros(npix_healpix)
+            
+    for jp in xrange(npix_healpix):
+    	theta_ring_healpix[jp], phi_ring_healpix[jp] = hp.pix2ang(nside, jp, nest=True)
+    	b_ring_healpix[jp] = (180./np.pi)*(theta_ring_healpix[jp] - np.pi/2.)
+    	if (phi_ring_healpix[jp] <= np.pi):
+    		l_ring_healpix[jp] = (180./np.pi)*(np.pi - phi_ring_healpix[jp])
+    	if (phi_ring_healpix[jp] > np.pi):
+    		l_ring_healpix[jp] = (180./np.pi)*(np.pi*3. - phi_ring_healpix[jp])
+
     
+    return l_ring_healpix, b_ring_healpix
+
 if __name__ == '__main__':
     plgal()
     grb_pipe()
+    ring_list()
