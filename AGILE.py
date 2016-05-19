@@ -558,7 +558,137 @@ def ring_list(nside=0):
     
     return l_ring_healpix, b_ring_healpix
 
+def pllcurve(N_lc=0, title='', filename1='', label1='', filename2='', label2='', filename3='', label3='', filename4='', label4='', filename5='', label5=''):
+	"""
+	 visLightCurve.py  -  description
+	 ---------------------------------------------------------------------------------
+	 Plotting the light curve from AGILE data
+	 ---------------------------------------------------------------------------------
+	 copyright            : (C) 2013 Valentina Fioretti
+	 email                : fioretti@iasfbo.inaf.it
+	 ----------------------------------------------
+	 Usage:
+	 visLightCurve.py out_name N_lc "Title" filename1 "label1" filename2 "label2"
+	 ---------------------------------------------------------------------------------
+	 Parameters:
+	 - N_lc:     number of loaded light curves (<= 5)
+	 - "Title":  plot title
+	 - filename: path+name of the file [string]
+	 - "label":  light curve label 
+	 ---------------------------------------------------------------------------------
+	 Required data format: ASCII file
+	 - column 1 = flux in photons cm-2 s-1
+	 - column 2 = flux error in photons cm-2 s-1
+	 - column 3 = error keyword (0 = standard data point, 1 = upper limit)
+	 - column 4 = time start of the bin [MJD]
+	 - column 5 = time bin in days
+	 ---------------------------------------------------------------------------------
+	 Caveats:
+	 The script loads a maximum of 5 light curves
+	 ---------------------------------------------------------------------------------
+	 Example:
+	 agile.pllcurve(N_lc=1, title='Title', filename1='path-to-file',  label1='VF')
+	 ---------------------------------------------------------------------------------
+	 Modification history:
+	 - 2013/10/15: upper limits are plotted using the bugged lower limit of matplotlib errorbar instead of building arrows.
+	"""
+
+	import numpy as np
+	import matplotlib.pyplot as plt
+
+	import sys
+
+	plt_title = title
+
+	# Plotting environment
+	fig = plt.figure(1, figsize=(10, 5))
+	txt = fig.suptitle(plt_title, size = 15)
+	ax_lc = fig.add_subplot(111)
+	ax_lc.set_xlabel('Time [MJD]')
+	ax_lc.set_ylabel('10$^{-8}$ photons cm$^{-2}$ s$^{-1}$')
+	ax_lc.minorticks_on()
+	ax_lc.tick_params(axis='x', which='minor', length=7)        
+	ax_lc.tick_params(axis='y', which='minor', length=7)        
+	ax_lc.tick_params(axis='x', which='major', length=10)        
+	ax_lc.tick_params(axis='y', which='major', length=10)        
+
+	color_array = ['k','b','r','g','c']
+	legend_array = []
+	name_arg = 2
+	label_arg = name_arg + 1
+	
+	lc_name_array = [filename1, filename2, filename3, filename4, filename5]
+	lc_label_array = [label1, label2, label3, label4, label5]
+	
+
+	for jlc in xrange(N_lc): 
+		lc_name = lc_name_array[jlc]
+		lc_label = lc_label_array[jlc]
+
+
+		# read the .dat file with the light curve data
+		f_lc = open(lc_name, 'r')
+
+		# Reading the data
+		flux_lc = []
+		err_flux_lc = []
+		err_type_lc = []
+		t_start_lc = []
+		t_bin_lc = []
+
+		for line in f_lc:
+			line = line.strip()
+			columns = line.split()
+			columns[0] = float(columns[0])  # converting from string to float
+			columns[1] = float(columns[1])
+			columns[2] = int(columns[2])
+			columns[3] = float(columns[3])
+			columns[4] = float(columns[4])
+
+			flux_lc.append(columns[0])
+			err_flux_lc.append(columns[1])
+			err_type_lc.append(columns[2])
+			t_start_lc.append(columns[3])
+			t_bin_lc.append(columns[4])
+
+
+		flux_lc = np.array(flux_lc) 
+		flux_lc = flux_lc/(10**(-8))
+		err_flux_lc = np.array(err_flux_lc) 
+		err_flux_lc = err_flux_lc/(10**(-8))
+		err_type_lc = np.array(err_type_lc) 
+		t_start_lc = np.array(t_start_lc) 
+		t_bin_lc = np.array(t_bin_lc) 
+
+		t_center_lc = np.zeros(len(t_start_lc))
+		for jbin in xrange(len(t_start_lc)):
+			t_center_lc[jbin] = t_start_lc[jbin] + t_bin_lc[jbin]/2.
+
+		# Separate the bins with error from upper limits
+		where_noupper = np.where(err_type_lc == 0)
+		where_upper = np.where(err_type_lc == 1)
+
+		where_noupper = where_noupper[0]
+		where_upper = where_upper[0]
+	
+		uplims = np.zeros(len(flux_lc))
+		uplims[where_upper] = True
+		color_lc = color_array[jlc]
+	
+		ax_lc.errorbar(t_center_lc, flux_lc, xerr=(t_bin_lc)/2., yerr=err_flux_lc, marker='o', fmt=color_lc, linestyle='None', elinewidth=1., capsize=0)
+
+		yrange = ax_lc.get_ylim()
+		err_flux_lc[where_upper] = (yrange[1] - yrange[0])/20.
+
+		ax_lc.errorbar(t_center_lc, flux_lc, xerr=(t_bin_lc)/2., yerr=err_flux_lc, uplims=uplims, fmt=color_lc, linestyle='None', elinewidth=1., capsize=0)
+
+
+
+	plt.show()
+
+
 if __name__ == '__main__':
     plgal()
     grb_pipe()
     ring_list()
+    pllcurve()
