@@ -44,7 +44,7 @@ from astropy.coordinates import ICRS, Galactic, FK4, FK5  # Low-level frames
 from astropy.coordinates import Angle, Latitude, Longitude  # Angles
 import astropy.units as u
 
-def plgal(title='', source_list='', square_list = '', ring_list='', vip_sources=0):
+def plgal(title='', source_list='', ring_list='', vip_sources=0):
 	"""
 	 plgal()  -  description
 	 ---------------------------------------------------------------------------------
