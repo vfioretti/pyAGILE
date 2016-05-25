@@ -44,7 +44,7 @@ from astropy.coordinates import ICRS, Galactic, FK4, FK5  # Low-level frames
 from astropy.coordinates import Angle, Latitude, Longitude  # Angles
 import astropy.units as u
 
-def plgal(title='', source_list='', ring_list='', vip_sources=0):
+def plgal(title='', source_list='', ring_list='', vip_sources=0, SAVE=0, out_name='image'):
 	"""
 	 plgal()  -  description
 	 ---------------------------------------------------------------------------------
@@ -59,6 +59,8 @@ def plgal(title='', source_list='', ring_list='', vip_sources=0):
 	 - source_list: ASCII file (+ path) with the galactic coordinates, in degrees, of the sources				                
 	 - ring_list: ASCII file (+ path) with the galactic coordinates, in degrees, of the rings center plus the radius
 	 - vip_sources: flag to load the most famous Gamma-ray sources (Crab, Vela, Geminga, 3C 454.3)
+	 - SAVE = keyword to save the image to file
+	 - out_name = name of the image to be savedkk
 	 ---------------------------------------------------------------------------------
 	 Required data input format: ASCII file (one entry each row)
 	 Optional parameters: color keyword c_1 (integer) for points and fill keyword (0/1) plus fill color 
@@ -155,6 +157,10 @@ def plgal(title='', source_list='', ring_list='', vip_sources=0):
 		lcoord = [crab_coord[0], vela_coord[0], geminga_coord[0], diamond_coord[0]]
 		bcoord = [crab_coord[1], vela_coord[1], geminga_coord[1], diamond_coord[1]]
 		ax.scatter(lcoord, bcoord, color='r', marker='*', s=50, zorder=2)
+	
+	if SAVE:
+		filename_png = out_name + '.png'
+		plt.savefig(filename_png, dpi=200)
 		
 	# Make-up
 	plt.grid(True)
@@ -222,7 +228,7 @@ def grb_pipe(evt_file='', log_file='', par_file='', GRB_time = 0., GRB_ra=0., GR
      print '- GRB_ra = RA of the source in deg.													'
      print '- GRB_dec = DEC of the source in deg.												'
      print '- (optional)																		'
-     print '	- GRB_time = T0 of the GRB														'
+     print '   - GRB_time = T0 of the GRB														'
      print '   - t1s = start time of N_on (GRB time reference frame)							'
      print '   - t2s = stop time of N_on (GRB time reference frame)								'
      print '   - t1b = start time of N_off (GRB time reference frame)							'
