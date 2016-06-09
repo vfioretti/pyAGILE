@@ -44,19 +44,95 @@ from astropy.coordinates import ICRS, Galactic, FK4, FK5  # Low-level frames
 from astropy.coordinates import Angle, Latitude, Longitude  # Angles
 import astropy.units as u
 
-def plgal(title='', source_list='', ring_list='', vip_sources=0, SAVE=0, out_name='image'):
+def plgal(title='', source_list=(), contour_list=(), ring_list=(), ring_radius=1, out_name='image.png', vip_sources=0):
+
+    deg2rad = np.pi/180.
+    cmap = cmx.jet  ##I set colomap to 'jet'
+    norm = cmc.Normalize(vmin=0, vmax=10)
+
+    # converting latitude to be plotted in the 180, 90, 0, 270, 180 axis
+    def convert_l(l_in):
+            if ((l_in >= 0.) & (l_in <= 180.)):
+                l_in = l_in*(-1.)
+            if (l_in > 180.):
+                l_in = 360. - l_in
+            return l_in
+
+    fig = plt.figure(1,figsize=[10,5])
+    ax = fig.add_subplot(111, projection='aitoff')
+
+    tick_labels = np.array([150, 120, 90, 60, 30, 0, 330, 300, 270, 240, 210])
+    ax.set_xticklabels(tick_labels)
+
+    if (len(source_list)):		
+    	source_list = np.array(source_list)
+    	l_source = source_list[:,0]
+        b_source = source_list[:,1]
+        l_source = np.append(l_source, l_source[0]);
+        b_source = np.append(b_source, b_source[0]);
+        c_source = []
+        if (len(source_list) == 3): r_source = source_list[2]
+        for i in xrange(len(l_source)):
+            l_source[i] = convert_l(l_source[i])*deg2rad
+            b_source[i] = b_source[i]*deg2rad
+            c_source.append(10)
+            if (len(source_list) == 3):
+            	ax.add_artist(Circle(xy=(l_source[i], b_source[i]), facecolor='none', fill='False', edgecolor='k', radius=r_source[i]*deg2rad, zorder = 1))
+
+        ax.scatter(l_source, b_source, s=2, marker='*', c='r', alpha=0.8, edgecolors='none')
+        
+    if (len(contour_list)):
+    	contour_list = np.array(contour_list)
+        l_contour = contour_list[:,0]
+        b_contour = contour_list[:,1]
+        l_contour = np.append(l_contour, l_contour[0]);
+        b_contour = np.append(b_contour, b_contour[0]);
+        c_contour = []
+        for i in xrange(len(l_contour)):
+            l_contour[i] = convert_l(l_contour[i])*deg2rad
+            b_contour[i] = b_contour[i]*deg2rad
+            c_contour.append(10)
+        ax.scatter(l_contour, b_contour, s=2, c='b', alpha=0.8, edgecolors='none')
+
+    if (len(ring_list)):    
+    	for ring in ring_list:
+        	l_in = convert_l(ring[0])*deg2rad
+        	b_in = ring[1]*deg2rad
+        	ax.add_artist(Circle(xy=(l_in, b_in), facecolor='none', fill='False', edgecolor='k', radius=ring_radius*deg2rad, zorder = 1))
+
+    if vip_sources:
+        crab_coord = [convert_l(184.557593)*deg2rad, -5.784197*deg2rad]
+        vela_coord = [convert_l(263.552021)*deg2rad, -2.787006*deg2rad]
+        geminga_coord = [convert_l(195.13428)*deg2rad, 4.26608*deg2rad]
+        diamond_coord = [convert_l(86.1110374)*deg2rad, -38.1837815*deg2rad]
+        lcoord = [crab_coord[0], vela_coord[0], geminga_coord[0], diamond_coord[0]]
+        bcoord = [crab_coord[1], vela_coord[1], geminga_coord[1], diamond_coord[1]]
+        ax.scatter(lcoord, bcoord, color='black', marker='*', s=50, zorder=2)
+
+    plt.grid(True)
+    plt.title(title)
+    plt.text(0,-(90+15)*deg2rad,'Galactic longitude (degrees)',
+      ha='center', va='center')
+    plt.ylabel('Galactic latitude (degrees)')
+    plt.savefig(out_name, dpi=300)
+
+
+def visCheck(title='', source_list='', contour_list='', ring_list='', vip_sources=0, SAVE=0, out_name='image'):
 	"""
-	 plgal()  -  description
+	 visCheck()  -  description
 	 ---------------------------------------------------------------------------------
 	 Function to plot the galaxy in galactic coordinates and AITOFF projection.
 	 It is possible to plot a set of rings or points as additional feature.
+	 It is possible to plot the Sun and Earth position. 
 	 ---------------------------------------------------------------------------------
 	 copyright            : (C) 2014 Valentina Fioretti
 	 email                : fioretti@iasfbo.inaf.it
 	 ---------------------------------------------------------------------------------
 	 Parameters (default = None):
 	 - title: title of the plot
-	 - source_list: ASCII file (+ path) with the galactic coordinates, in degrees, of the sources				                
+	 - source_list: ASCII file (+ path) with the galactic coordinates, in degrees, of the sources
+	 				[OPTIONAL] a third column for the error radius in deg.                
+	 - contour_list: ASCII file (+ path) with the galactic coordinates, in degrees, of the sources. 				                
 	 - ring_list: ASCII file (+ path) with the galactic coordinates, in degrees, of the rings center plus the radius
 	 - vip_sources: flag to load the most famous Gamma-ray sources (Crab, Vela, Geminga, 3C 454.3)
 	 - SAVE = keyword to save the image to file
@@ -77,50 +153,42 @@ def plgal(title='', source_list='', ring_list='', vip_sources=0, SAVE=0, out_nam
 	 - 2014/08/20: creation date
 	"""
 
-	deg2rad = np.pi/180.
-	cmap = cmx.jet  ##I set colomap to 'jet' 
-	norm = cmc.Normalize(vmin=0, vmax=10) 
-
-	# converting latitude to be plotted in the 180, 90, 0, 270, 180 axis
-	def convert_l(l_in):
-			if ((l_in >= 0.) & (l_in <= 180.)):
-				l_in = l_in*(-1.) 
-			if (l_in > 180.):
-				l_in = 360. - l_in
-			return l_in
-
-	fig = plt.figure(1,figsize=[10,5])
-	ax = fig.add_subplot(111, projection='aitoff')
-
-	tick_labels = np.array([150, 120, 90, 60, 30, 0, 330, 300, 270, 240, 210])
-	ax.set_xticklabels(tick_labels)
-
 	# Loading the sources
 	if source_list:
-		l_source = []
-		b_source = []
-		c_source = []
 		f_read = open(source_list, 'r')
+		source = []
 		for line in f_read:
 			line = line.strip()
 			columns = line.split()
 			n_cols = len(columns)
 			columns[0] = float(columns[0])  # converting from string to float
 			columns[1] = float(columns[1])
+			l_in = columns[0]
+			b_in = columns[1]
 			if (n_cols > 2):
-				columns[2] = int(columns[2])
-				c_source.append(columns[2])
+				columns[2] = float(columns[2])
+				source.append([l_in, b_in, columns[2]])
 			else:
-				c_source.append(0)
-			l_in = convert_l(columns[0])*deg2rad
-			b_in = columns[1]*deg2rad
-			l_source.append(l_in) 
-			b_source.append(b_in)
-		ax.scatter(l_source, b_source, s=5, c=c_source)
+				source.append([l_in, b_in])
+				
+	# Loading the sources
+	if contour_list:
+		f_read = open(contour_list, 'r')
+		contour = []
+		for line in f_read:
+			line = line.strip()
+			columns = line.split()
+			n_cols = len(columns)
+			columns[0] = float(columns[0])  # converting from string to float
+			columns[1] = float(columns[1])
+			l_in = columns[0]
+			b_in = columns[1]
+			contour.append([l_in, b_in])
 
 	# Loading the rings
 	if ring_list:
 		f_read = open(ring_list, 'r')
+		ring = []
 		for line in f_read:
 			f_ring = 'False'
 			fc_ring = 'none'
@@ -143,33 +211,12 @@ def plgal(title='', source_list='', ring_list='', vip_sources=0, SAVE=0, out_nam
 					fc_ring = cmap(norm(columns[4])) 
 				else: 
 					fc_ring = 'none'
-			l_in = convert_l(columns[0])
+			l_in = columns[0]
 			b_in = columns[1]
 			r_in = columns[2]
-			ax.add_artist(Circle(xy=((l_in)*deg2rad, (b_in)*deg2rad), facecolor=fc_ring, fill=f_ring, edgecolor='k', radius=r_in*deg2rad, zorder = 1)) 
+			ring.append([l_in, b_in, r_in])
 
-	# Loading the vip sources	
-	if vip_sources:
-		crab_coord = [convert_l(184.557593)*deg2rad, -5.784197*deg2rad]
-		vela_coord = [convert_l(263.552021)*deg2rad, -2.787006*deg2rad]
-		geminga_coord = [convert_l(195.13428)*deg2rad, 4.26608*deg2rad]
-		diamond_coord = [convert_l(86.1110374)*deg2rad, -38.1837815*deg2rad]
-		lcoord = [crab_coord[0], vela_coord[0], geminga_coord[0], diamond_coord[0]]
-		bcoord = [crab_coord[1], vela_coord[1], geminga_coord[1], diamond_coord[1]]
-		ax.scatter(lcoord, bcoord, color='r', marker='*', s=50, zorder=2)
-	
-	if SAVE:
-		filename_png = out_name + '.png'
-		plt.savefig(filename_png, dpi=200)
-		
-	# Make-up
-	plt.grid(True)
-	plt.title(title)
-	plt.text(0,-(90+15)*deg2rad,'Galactic longitude (degrees)',
-      ha='center', va='center')
-	plt.ylabel('Galactic latitude (degrees)')
-
-	plt.show()
+	plgal(title=title, source_list=source, contour_list=contour, ring_list=ring, ring_radius=1, out_name='image.png', vip_sources=0)
 
 
 def grb_pipe(evt_file='', log_file='', par_file='', GRB_time = 0., GRB_ra=0., GRB_dec=0., t1s=0., t2s=0., t1b=0., t2b=0., help=False):
@@ -698,3 +745,4 @@ if __name__ == '__main__':
     grb_pipe()
     ring_list()
     pllcurve()
+    visCheck()
