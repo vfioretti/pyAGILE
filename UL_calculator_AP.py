@@ -17,6 +17,7 @@
  - source_phi = source azimuthal angle [deg.]
  - IRF_path = path of the IRF files 
  - bkg_type = [0 = MODEL, 1 = COUNTED]
+ - plot_flag = flag to visualize the normalized PSF
  ---------------------------------------------------------------------------------------------
  Additional parameters:
  - if bkg_type = 0 (MODEL)
@@ -53,6 +54,7 @@ source_theta = float(arg_list[6])
 source_phi = float(arg_list[7])
 irf_path = arg_list[8]
 bkg_type = int(arg_list[9])
+plot_flag = int(arg_list[10])
 
 if bkg_type == 0:
 	bkg_flux = float(arg_list[10])
@@ -103,23 +105,62 @@ Rho = Rho[0]
 Psi = wcs_tab_psf.field('PSI')
 Psi = Psi[0]
 
+####### PSF averaged over the source energy distribution
+
+# model functions
+
+def PowerLaw(x, slope):
+    return x**(-slope)
+
+def IntPowerLaw(e1, e2, slope):
+    return (((e2**(-slope + 1.))/(-slope + 1.)) - ((e1**(-slope + 1.))/(-slope + 1.)))
+
+
+# select energy range
+where_band = np.where((Energy_min >= emin) & (Energy_max <= emax))
+energy_band = Energy[where_band]
+#PSF_band = PSF[where_band]
+energymin_band = Energy_min[where_band]
+energymax_band = Energy_max[where_band]
+
+int_source_band = IntPowerLaw(emin, emax, gindex)
+fract_source = []
+for je in xrange(len(energy_band)):
+    int_source_bin = IntPowerLaw(energymin_band[je], energymax_band[je], gindex)
+    fract_source.append(int_source_bin/int_source_band)
+
+#PSF_norm = np.average(PSF_band, weights = fract_source)
+
+
+IRF_bin_rho = 0.1
+counter_eband = 0
 primary_psf = hdulist_psf[0].data
-PSF = np.zeros(len(Energy))
+#PSF = np.zeros(len(Energy))
+density_PSF = np.zeros(len(Rho))
+counts_PSF = np.zeros(len(Rho))
+radius_PSF = np.zeros(len(Rho))
 for jphi in xrange(len(phi)):
-	if (phi[jphi] == phi_sel):
-		primary_psf_phi = primary_psf[jphi]
-		#print "primary_psf_phi ", primary_psf_phi
-		for jtheta in xrange(len(theta)):
-			if (theta[jtheta] == theta_sel):
-				primary_psf_phi_theta = primary_psf_phi[jtheta]
-				for jene in xrange(len(Energy)):
-					primary_psf_phi_theta_ene = primary_psf_phi_theta[jene]
-					for jpsi in xrange(len(Psi)):
-						if (Psi[jpsi] == 0):
-							primary_psf_phi_theta_ene_psi = primary_psf_phi_theta_ene[jpsi]
+    if (phi[jphi] == phi_sel):
+        primary_psf_phi = primary_psf[jphi]
+        for jtheta in xrange(len(theta)):
+            if (theta[jtheta] == theta_sel):
+                primary_psf_phi_theta = primary_psf_phi[jtheta]
+                for jene in xrange(len(Energy)):
+                    primary_psf_phi_theta_ene = primary_psf_phi_theta[jene]
+                    for jpsi in xrange(len(Psi)):
+                        if (Psi[jpsi] == 0):
+                            primary_psf_phi_theta_ene_psi = primary_psf_phi_theta_ene[jpsi]
+                            if ((Energy[jene] >= emin) & (Energy[jene] <= emax)):
+                                for jrho in xrange(len(Rho)):
+                                    radius_PSF[jrho] = Rho[jrho]
+                                    density_PSF[jrho] = density_PSF[jrho] + primary_psf_phi_theta_ene_psi[jrho]*fract_source[counter_eband]
+                                    sph_annulus = (2.*np.pi*(np.cos((Rho[jrho]-IRF_bin_rho/2.)*(np.pi/180.)) - np.cos((Rho[jrho]+IRF_bin_rho/2.)*(np.pi/180.)))) #sr
+                                    counts_PSF[jrho] = counts_PSF[jrho] + primary_psf_phi_theta_ene_psi[jrho]*fract_source[counter_eband]*sph_annulus
+                                counter_eband+=1
+                            """
 							counts = []
 							for jrho in xrange(len(Rho)):
-								sph_annulus = (2.*math.pi*(math.cos((Rho[jrho]-0.05)*(math.pi/180.)) - math.cos((Rho[jrho]+0.05)*(math.pi/180.)))) #sr
+								sph_annulus = (2.*np.pi*(np.cos((Rho[jrho]-IRF_bin_rho/2.)*(np.pi/180.)) - np.cos((Rho[jrho]+IRF_bin_rho/2.)*(np.pi/180.)))) #sr
 								counts.append(primary_psf_phi_theta_ene_psi[jrho]*sph_annulus)
 								
 							total_counts = np.sum(counts)
@@ -130,32 +171,62 @@ for jphi in xrange(len(phi)):
 								if (radial_counts >= cr_counts): 
 									PSF[jene] = Rho[jrho]
 									break
+                            """
+
+# Fitting with a king profile
+from scipy.optimize import curve_fit
+from scipy.interpolate import interp1d
 
 
-####### PSF averaged over the source energy distribution
+# normalization
+density_PSF_norm = np.zeros(len(density_PSF))
+tot_rate = np.max(density_PSF)
+for jann in xrange(len(density_PSF_norm)):
+    density_PSF_norm[jann] = density_PSF[jann]/tot_rate
 
-# model functions
+# King from FERMI
+def king_profile(x,sigma, gamma, B):
+    return ((1./(2.*np.pi*(sigma**2)))*(1. - (1./gamma))*((1. + ((x**2)/(2.*(sigma**2)*gamma)))**(-gamma)))*B
+        
+# king fit
+p, cov = curve_fit(king_profile, radius_PSF, density_PSF_norm, maxfev=1000000*(len(radius_PSF)+1))
+            
+print 'King fit result: ', p
+perr = np.sqrt(np.diag(cov))
+print 'King fit result 1 standard deviation: ', perr
+# Calculate degrees of freedom of fit
+dof = len(radius_PSF) - len(p)
+                   
+# Calculate best fit model
+y_fit = np.zeros(len(radius_PSF))
+for jbin in xrange(len(radius_PSF)):
+    y_fit[jbin] = king_profile(radius_PSF[jbin],p[0], p[1], p[2])
 
-def PowerLaw(x, slope):
-	return x**(-slope)
+sigma_fit = round(abs(p[0]), 10)
+gamma_fit = round(abs(p[1]), 10)
+B_fit = round(abs(p[2]), 10)
 
-def IntPowerLaw(e1, e2, slope):
-	return (((e2**(-slope + 1.))/(-slope + 1.)) - ((e1**(-slope + 1.))/(-slope + 1.)))
+# computing the source coverage
+total_counts = np.sum(counts_PSF)
+counts_interp_norm = np.cumsum(counts_PSF/total_counts)
+interp_cum = interp1d(radius_PSF, counts_interp_norm)
+source_coverage = interp_cum(radius_on)
 
-# select energy range
-where_band = np.where((Energy_min >= emin) & (Energy_max <= emax))
-energy_band = Energy[where_band]
-PSF_band = PSF[where_band]
-energymin_band = Energy_min[where_band]
-energymax_band = Energy_max[where_band]
 
-int_source_band = IntPowerLaw(emin, emax, gindex)
-fract_source = []
-for je in xrange(len(energy_band)):
-	int_source_bin = IntPowerLaw(energymin_band[je], energymax_band[je], gindex)
-	fract_source.append(int_source_bin/int_source_band)
+        
+if plot_flag:
+    fig = plt.figure(1,figsize=[7,6])
+    fig.tight_layout()
+    ax = fig.add_subplot(111)
+    ax.set_title(r'AGILE PSF ('+str(emin)+' < E < '+str(emax)+r', $\Gamma=$'+str(gindex)+')')
+    ax.plot(radius_PSF, density_PSF_norm, '-k', linewidth=1.5, label='IRF distribution')
+    ax.plot(radius_PSF, y_fit, '-r', linewidth=1.5, label='King fit')
+    ax.set_xlim(0, radius_on)
+    ax.legend(numpoints=1)
+    plt.grid()
+    plt.show()
 
-PSF_norm = np.average(PSF_band, weights = fract_source)
+
 
 print "###########################################"
 print "#              SOURCE PSF                 #"
@@ -165,7 +236,7 @@ print "# - Energy max [MeV] = ", emax
 print "# - photon index [E^-gamma] = ", gindex
 print "# - source off-axis [deg.] = ", theta_sel
 print "# - source azimuthal angle [deg.] = ", phi_sel
-print "# - normalized PSF [deg.] = ", PSF_norm
+print "# - source coverage [%] = ", source_coverage*100.
 	
 
 #################################### 
@@ -212,7 +283,7 @@ if bkg_type == 0:
 					N_source = 0.
 					break
 	
-			F_lim = N_source/expo_on
+			F_lim = (N_source + N_source*(1. - source_coverage))/expo_on
 
 			print "# Sensitivity parameters:"
 			print "# - sigma = ", Sign[js]
@@ -263,7 +334,7 @@ if bkg_type == 1:
 					N_source = 0.
 					break
 	
-			F_lim = N_source/expo_on
+			F_lim = (N_source + N_source*(1. - source_coverage))/expo_on
 
 			print "# Sensitivity parameters:"
 			print "# - sigma = ", Sign[js]
