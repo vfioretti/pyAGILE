@@ -105,6 +105,14 @@ Rho = Rho[0]
 Psi = wcs_tab_psf.field('PSI')
 Psi = Psi[0]
 
+
+if plot_flag:
+    fig = plt.figure(1,figsize=[7,6])
+    fig.tight_layout()
+    ax = fig.add_subplot(111)
+    ax.set_title(r'AGILE PSF ('+str(int(emin))+' < E < '+str(int(emax))+r', $\Gamma=$'+str(gindex)+')')
+
+
 ####### PSF averaged over the source energy distribution
 
 # model functions
@@ -129,13 +137,10 @@ for je in xrange(len(energy_band)):
     int_source_bin = IntPowerLaw(energymin_band[je], energymax_band[je], gindex)
     fract_source.append(int_source_bin/int_source_band)
 
-#PSF_norm = np.average(PSF_band, weights = fract_source)
-
 
 IRF_bin_rho = 0.1
 counter_eband = 0
 primary_psf = hdulist_psf[0].data
-#PSF = np.zeros(len(Energy))
 density_PSF = np.zeros(len(Rho))
 counts_PSF = np.zeros(len(Rho))
 radius_PSF = np.zeros(len(Rho))
@@ -151,12 +156,18 @@ for jphi in xrange(len(phi)):
                         if (Psi[jpsi] == 0):
                             primary_psf_phi_theta_ene_psi = primary_psf_phi_theta_ene[jpsi]
                             if ((Energy[jene] >= emin) & (Energy[jene] <= emax)):
+                                modo_density_PSF = []
                                 for jrho in xrange(len(Rho)):
                                     radius_PSF[jrho] = Rho[jrho]
                                     density_PSF[jrho] = density_PSF[jrho] + primary_psf_phi_theta_ene_psi[jrho]*fract_source[counter_eband]
+                                    modo_density_PSF.append(primary_psf_phi_theta_ene_psi[jrho])
                                     sph_annulus = (2.*np.pi*(np.cos((Rho[jrho]-IRF_bin_rho/2.)*(np.pi/180.)) - np.cos((Rho[jrho]+IRF_bin_rho/2.)*(np.pi/180.)))) #sr
                                     counts_PSF[jrho] = counts_PSF[jrho] + primary_psf_phi_theta_ene_psi[jrho]*fract_source[counter_eband]*sph_annulus
                                 counter_eband+=1
+                                # plotting the PSF for each energy bin
+                                modo_density_PSF = np.array(modo_density_PSF)
+                                top_mono = np.max(modo_density_PSF)
+                                ax.plot(radius_PSF, modo_density_PSF/top_mono, linewidth=1.5, label='E = '+str(Energy[jene])+' MeV')
                             """
 							counts = []
 							for jrho in xrange(len(Rho)):
@@ -215,13 +226,11 @@ source_coverage = interp_cum(radius_on)
 
         
 if plot_flag:
-    fig = plt.figure(1,figsize=[7,6])
-    fig.tight_layout()
-    ax = fig.add_subplot(111)
-    ax.set_title(r'AGILE PSF ('+str(emin)+' < E < '+str(emax)+r', $\Gamma=$'+str(gindex)+')')
-    ax.plot(radius_PSF, density_PSF_norm, '-k', linewidth=1.5, label='IRF distribution')
-    ax.plot(radius_PSF, y_fit, '-r', linewidth=1.5, label='King fit')
+    ax.plot(radius_PSF, density_PSF_norm, '-k', linewidth=2.5, label='IRF distribution')
+    ax.plot(radius_PSF, y_fit, '-r', linewidth=2.5, label='King fit')
     ax.set_xlim(0, radius_on)
+    ax.set_ylabel('norm. Surface Brightness [counts sr$^{-1}$]')
+    ax.set_xlabel('Radial distance [deg.]')
     ax.legend(numpoints=1)
     plt.grid()
     plt.show()
