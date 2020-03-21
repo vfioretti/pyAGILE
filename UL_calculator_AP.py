@@ -292,7 +292,7 @@ if bkg_type == 0:
 					N_source = 0.
 					break
 	
-			F_lim = (N_source + N_source*(1. - source_coverage))/expo_on
+			F_lim = (N_source/source_coverage)/expo_on
 
 			print "# Sensitivity parameters:"
 			print "# - sigma = ", Sign[js]
@@ -343,7 +343,7 @@ if bkg_type == 1:
 					N_source = 0.
 					break
 	
-			F_lim = (N_source + N_source*(1. - source_coverage))/expo_on
+			F_lim = (N_source/source_coverage)/expo_on
 
 			print "# Sensitivity parameters:"
 			print "# - sigma = ", Sign[js]
